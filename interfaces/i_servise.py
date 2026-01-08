@@ -12,3 +12,18 @@ class IServise(ABC):
     def setData(data: T)->None:
         pass
 
+    @abstractmethod
+    def getObjectControl(self)->T:
+        pass
+
+    @abstractmethod
+    def getControlElements(self,id)->T:
+        pass
+
+    @abstractmethod
+    def getControlElementParam(self,id)->T:
+        pass
+
+    @abstractmethod
+    def getControlElementParamValue(self,idCntlEl,idParam)->T:
+        pass

@@ -7,8 +7,23 @@ class ControllerWeb(IControllers[TechCardData]):
         pass
 
     def setServise(self,serv:IServise):
-        serv=serv    
+        self.serv=serv    
     
+    def getObjectControl(self)->TechCardData:
+        return self.serv.getObjectControl()
+    
+    def getControlElements(self,id)->TechCardData:
+        return self.serv.getControlElements(id)
+    
+    def getControlElementParam(self,id)->TechCardData:
+        print(self.serv.getControlElementParam(id))
+        return self.serv.getControlElementParam(id)
+    
+    def getControlElementParamValue(self,idCntlEl,idParam)->TechCardData:
+        return self.serv.getControlElementParamValue(idCntlEl,idParam)
+
     def handle_request(self, data: TechCardData) -> TechCardData:
         """Обрабатывает входные данные и возвращает результат"""
         pass    
+
+

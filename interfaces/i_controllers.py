@@ -13,6 +13,22 @@ class IControllers(ABC, Generic[T]):
     def setServise(self,sertv:IServise):
         pass
 
+    @abstractmethod
+    def getObjectControl(self)->T:
+        pass
+
+    @abstractmethod
+    def getControlElements(self,id)->T:
+        pass
+
+    @abstractmethod
+    def getControlElementParam(self,id)->T:
+        pass
+
+    @abstractmethod
+    def getControlElementParamValue(self,idCntlEl,idParam)->T:
+        pass
+    
     # @abstractmethod
     # def selectionOfControlObject(self)->T:
 

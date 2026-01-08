@@ -1,3 +1,6 @@
+import json
+from typing import Optional
+
 class TechCardData:
     def __init__(self, params: dict | None = None):
         # текущие параметры пользователя
@@ -28,4 +31,11 @@ class TechCardData:
         current = '\n'.join(f"{k}: {v}" for k, v in data["current"].items())
         available = '\n'.join(f"{k}: {v}" for k, v in data["available"].items())
         return f"Current:\n{current}\n\nAvailable:\n{available}"
+    
+    def serialise(self)->str:
+        return json.dumps({
+            "params": self.params,
+            "available": self.available
+        }, ensure_ascii=False, indent=2)
+        
     

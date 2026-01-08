@@ -219,20 +219,7 @@ class PostgresDataBase(IRepository[TechCardData]):
             traceback.print_exc()
             self.conn.rollback()
             raise
-    
-    def findPossibleTypes(self) -> List[dict]:
-        """Find all possible types of controlled elements"""
-        try:
-            self.cursor.execute("""
-                SELECT "Id", name 
-                FROM "typeOfControlledElement"
-                ORDER BY name
-            """)
-            types = self.cursor.fetchall()
-            return [{"id": t[0], "name": t[1]} for t in types]
-        except Exception as e:
-            print(f"Error in findPossibleTypes: {e}")
-            return []
+
     
     def getParamDefinitions(self) -> List[dict]:
         """Get all parameter definitions"""
@@ -266,9 +253,15 @@ class PostgresDataBase(IRepository[TechCardData]):
         ORDER BY pd.name;
         """
         self.cursor.execute(query, (type_id,))
-        return self.cursor.fetchall()
+        rows = self.cursor.fetchall()
+        print(rows)
+        id_name_dict = {row['id']: row['name'] for row in rows}
+        
+        tech_card = TechCardData()
+        tech_card.available = id_name_dict
+        return tech_card
     
-    def get_all_controlled_element_types(self):
+    def get_all_controlled_element_types(self)->TechCardData:
         """
         Получить все типы контролируемых элементов
         
@@ -281,4 +274,121 @@ class PostgresDataBase(IRepository[TechCardData]):
         ORDER BY name;
         """
         self.cursor.execute(query)
-        return self.cursor.fetchall()
+        
+        rows = self.cursor.fetchall()
+        id_name_dict = {row['id']: row['name'] for row in rows}
+        
+        tech_card = TechCardData()
+        tech_card.available = id_name_dict
+
+        return tech_card
+    
+    def get_all_objects_by_type_id(self, type_id):
+        """
+        Получить только имена элементов контроля по ID типа
+        
+        Args:
+            type_id (int): ID типа из typeOfControlledElement
+            
+        Returns:
+            list: Имена элементов этого типа
+        """
+        query = """
+        SELECT 
+            id,
+            name
+        FROM public."objectControl"
+        WHERE "idTypeControl" = %s
+        ORDER BY name
+        """
+        self.cursor.execute(query, (type_id,))
+        rows = self.cursor.fetchall()
+        id_name_dict = {row['id']: row['name'] for row in rows}
+        tech_card = TechCardData()
+        tech_card.available = id_name_dict
+        return tech_card
+    
+    
+    def get_all_possible_values_by_param_and_element(self, element_type_id,param_id ):
+        #element_type_id,param_id=param_id,element_type_id
+        """
+        Получить все возможные значения параметра для типа контролируемого элемента
+        
+        Args:
+            param_id (int): ID параметра из paramsDefinition
+            element_type_id (int): ID типа контролируемого элемента
+            
+        Returns:
+            list: Все уникальные значения параметра
+        """
+        # Сначала получаем тип данных параметра
+        type_query = """
+        SELECT "typeData" 
+        FROM public."paramsDefinition" 
+        WHERE id = %s
+        """
+        self.cursor.execute(type_query, (param_id,))
+        result = self.cursor.fetchone()
+        
+        if not result:
+            return []
+        
+        param_type = result['typeData']
+        
+        # Формируем запрос с правильными именами столбцов
+        query = """
+        SELECT DISTINCT 
+            CASE 
+                WHEN poc."valueInt" IS NOT NULL THEN poc."valueInt"::text
+                WHEN poc."valueDouble" IS NOT NULL THEN poc."valueDouble"::text
+                WHEN poc."valueString" IS NOT NULL THEN poc."valueString"
+                WHEN poc."valueBool" IS NOT NULL THEN poc."valueBool"::text
+            END as value,
+            CASE 
+                WHEN poc."valueInt" IS NOT NULL THEN 'integer'
+                WHEN poc."valueDouble" IS NOT NULL THEN 'double'
+                WHEN poc."valueString" IS NOT NULL THEN 'string'
+                WHEN poc."valueBool" IS NOT NULL THEN 'boolean'
+            END as value_type
+        FROM public."paramsObjectControl" poc
+        INNER JOIN public."objectControl" oc ON poc."idObjectControl" = oc.id
+        WHERE poc."idDefParams" = %s 
+            AND oc."idTypeControl" = %s
+        ORDER BY value
+        """
+        
+        self.cursor.execute(query, (param_id, element_type_id))
+        all_values = self.cursor.fetchall()
+        
+        # Преобразуем значения
+        processed_values = []
+        for item in all_values:
+            value = item['value']
+            value_type = item['value_type']
+            
+            if value is None:
+                continue
+                
+            try:
+                if param_type.lower() == 'integer' and value_type == 'integer':
+                    processed_values.append(int(value))
+                elif param_type.lower() in ['double', 'float', 'real'] and value_type in ['double', 'integer']:
+                    processed_values.append(float(value))
+                elif param_type.lower() == 'boolean' and value_type == 'boolean':
+                    processed_values.append(value.lower() == 'true')
+                elif param_type.lower() == 'string' and value_type in ['string', 'integer', 'double', 'boolean']:
+                    processed_values.append(str(value))
+            except (ValueError, TypeError) as e:
+                print(f"Ошибка преобразования значения {value}: {e}")
+                continue
+        
+        # Убираем дубликаты и возвращаем
+        unique_values = []
+        for val in processed_values:
+            if val not in unique_values:
+                unique_values.append(val)
+        
+        tech_card = TechCardData()
+        tech_card.available = {param_id:unique_values}
+
+        return tech_card

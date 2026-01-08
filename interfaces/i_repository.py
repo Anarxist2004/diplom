@@ -21,15 +21,18 @@ class IRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def findParamsByCurentParam(self, data: T):
+    def get_available_params_for_type(self, type_id):#получение параметров всех типов контролирующего элемента
         pass
 
     @abstractmethod
-    def get_available_params_for_type(self, type_id):#получение всех типов контролирующего элемента
+    def get_all_controlled_element_types(self)->T:#получение всех типов контролируемых эементов
+        pass
+    
+    @abstractmethod
+    def get_all_objects_by_type_id(self, type_id)->T:#получние все контролируемых элементов по id типа
         pass
 
     @abstractmethod
-    def get_all_controlled_element_types(self):#получение всех типов контролируемых эементов
+    def get_all_possible_values_by_param_and_element(self, element_type_id,param_id)->T:
         pass
-
     
