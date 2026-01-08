@@ -7,9 +7,8 @@ from psycopg2.extras import RealDictCursor
 
 
 class PostgresDataBase(IRepository[TechCardData]):
-    def __init__(self):
+    def __init__(self,dsn):
         try:
-            dsn = "host=localhost port=5435 dbname=techCard user=postgres password=1"
             
             # создаем подключение
             self.conn = psycopg2.connect(dsn)
