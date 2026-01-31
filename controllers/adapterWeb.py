@@ -18,7 +18,7 @@ def create_adapter(controller: IControllers,):
             if control_type == "object":
                 tech_card = controller.getObjectControl()
             elif control_type == "element":
-                tech_card = controller.getControlElements(payload.get("params", 1))
+                tech_card = controller.getControlElements(payload.get("type", 1))
             elif control_type=="elementParams":
                 tech_card = controller.getControlElementParam(payload.get("params", 1))
             elif control_type=="elementParamValue":

@@ -4,9 +4,8 @@ from interfaces.i_controllers import IControllers
 from interfaces.i_servise import IServise
 
 class TechCardService(IServise):
-    def __init__(self, repo: IRepository,controller: IControllers):
+    def __init__(self, repo: IRepository):
         self.repo = repo
-        self.controller=controller
 
     def findNewParamsByTechCard(self,data: TechCardData)->None:
         self.repo.findParamsByCurentParam(data)
@@ -26,6 +25,3 @@ class TechCardService(IServise):
     
     def getControlElementParamValue(self,idCntlEl,idParam)->TechCardData:
         return self.repo.get_all_possible_values_by_param_and_element(idCntlEl,idParam)
-
-    
-

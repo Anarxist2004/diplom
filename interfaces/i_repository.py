@@ -35,4 +35,9 @@ class IRepository(ABC, Generic[T]):
     @abstractmethod
     def get_all_possible_values_by_param_and_element(self, element_type_id,param_id)->T:
         pass
-    
+
+    @abstractmethod
+    def get_params_for_element(self, element_id: int) -> T:
+        """Получить все параметры и их значения для конкретного элемента (objectControl) по его id."""
+        pass
+

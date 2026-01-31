@@ -9,7 +9,7 @@ def main():
     
     repo = PostgresDataBase("host=localhost port=5435 dbname=techCard user=postgres password=1")
     controller=ControllerWeb()
-    service = TechCardService(repo,controller)
+    service = TechCardService(repo)
     controller.setServise(service)
     create_adapter(controller)
 
@@ -20,7 +20,6 @@ def main():
 def testF():
     repo = PostgresDataBase("host=localhost port=5435 dbname=techCard user=postgres password=1")
     controller=ControllerWeb()
-    service = TechCardService(repo,controller)
     controller.setServise(service)
     #create_adapter(controller)
 

@@ -1,13 +1,20 @@
 import json
-from typing import Optional
+from typing import Optional, Dict, Any
 
+from enum import StrEnum
+class TypeObjectControl(StrEnum):
+    PLATE="пластина"
+    PIPE="труба"
+    
 class TechCardData:
-    def __init__(self, params: dict | None = None):
-        # текущие параметры пользователя
-        self.params: dict = params or {}
-
-        # найденные / возможные параметры
-        self.available: dict = {}
+    def __init__(
+        self,
+        typeObjectControl: Optional[TypeObjectControl] = None,
+        params: Optional[Dict[str, Dict[str, Any]]] = None
+    ):
+        self.type = typeObjectControl
+        self.params = params or {}
+        self.available: Dict[str, Any] = {}
 
     def get(self, key: str):
         return self.params.get(key)
@@ -15,27 +22,39 @@ class TechCardData:
     def set(self, key: str, value):
         self.params[key] = value
 
-    def set_available(self, key: str, values: list):
-        self.available[key] = values
+    def set_available(self, key: str, value: Any) -> None:
+        """Установить доступные значения для параметра."""
+        self.available[key] = value
 
+    def getTypeObjectControl(self,)->TypeObjectControl:
+        return self.type
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict:
         return {
             "current": self.params,
             "available": self.available
     }
 
-    def __str__(self):
-        # Преобразуем словарь в читаемую строку
-        data = self.to_dict()
-        current = '\n'.join(f"{k}: {v}" for k, v in data["current"].items())
-        available = '\n'.join(f"{k}: {v}" for k, v in data["available"].items())
-        return f"Current:\n{current}\n\nAvailable:\n{available}"
-    
-    def serialise(self)->str:
-        return json.dumps({
+    def _to_json_dict(self) -> Dict[str, Any]:
+        type_val = self.type.value if hasattr(self.type, "value") else self.type
+        return {
+            "type": type_val,
             "params": self.params,
-            "available": self.available
-        }, ensure_ascii=False, indent=2)
+            "available": self.available,
+        }
+
+    def __str__(self) -> str:
+        return json.dumps(
+            self._to_json_dict(),
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def serialise(self) -> str:
+        return json.dumps(
+            self._to_json_dict(),
+            ensure_ascii=False,
+            indent=2,
+        )
         
-    
+

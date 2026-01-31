@@ -5,16 +5,22 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 
-
 class PostgresDataBase(IRepository[TechCardData]):
-    def __init__(self,dsn):
+    """
+    Репозиторий для работы с БД в соответствии со схемой:
+    - blocks (blockId, name)
+    - material (idMaterial, name)
+    - objectControl (id, idTypeControl, name)
+    - paramsDefinition (id, name, typeData, idBlock)
+    - paramsObjectControl (idObjectControl, idDefParams, valueInt, valueDouble, valueString, valueBool, id, imageRef)
+    - typeOfControlledElement (Id, name)
+    - typeParams (id, idTypeDefParam, idTypeControlEl, dafauilValue)
+    """
+
+    def __init__(self, dsn: str):
+        self._cards: List[TechCardData] = []
         try:
-            
-            # создаем подключение
             self.conn = psycopg2.connect(dsn)
-
-
-            # курсор с возвратом строк как словарей
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
             print("Подключение к базе успешно")
         except psycopg2.Error as e:
@@ -27,65 +33,60 @@ class PostgresDataBase(IRepository[TechCardData]):
 
     def update(self, entity: TechCardData) -> None:
         for i, card in enumerate(self._cards):
-            if card.id == entity.id:
+            if getattr(card, "id", None) == getattr(entity, "id", None):
                 self._cards[i] = entity
+                return
 
     def delete(self, entity: TechCardData) -> None:
-        self._cards = [c for c in self._cards if c.id != entity.id]
+        entity_id = getattr(entity, "id", None)
+        self._cards = [c for c in self._cards if getattr(c, "id", None) != entity_id]
 
-    def get_by_id(self, id: int) -> TechCardData | None:
+    def get_by_id(self, id: int) -> Optional[TechCardData]:
         for card in self._cards:
-            if card.id == id:
+            if getattr(card, "id", None) == id:
                 return card
         return None
 
-    def list_all(self) -> list[TechCardData]:
-        return self._cards
-    
-    def close(self):
-        """Close database connection"""
-        self.cursor.close()
-        self.conn.close()
+    def list_all(self) -> List[TechCardData]:
+        return self._cards.copy()
 
-    def findParamsByCurentParam(self, data: TechCardData):
+    def close(self) -> None:
+        """Закрытие подключения к БД."""
+        if self.cursor:
+            self.cursor.close()
+        if self.conn:
+            self.conn.close()
+
+    def findParamsByCurentParam(self, data: TechCardData) -> TechCardData:
         """
-        Find available parameters based on current parameters.
+        Поиск доступных параметров по текущим выбранным параметрам.
+        Использует таблицы: objectControl, typeOfControlledElement, paramsDefinition, paramsObjectControl.
         """
+        if not self.conn or not self.cursor:
+            return data
         try:
             current_params = data.params
-            
-            print(f"DEBUG: Current params: {current_params}")
-            
             query_conditions = []
-            query_params = []
-            
-            # Filter by type
-            type_control_id = current_params.get('typeOfControlledElement')
+            query_params: List[object] = []
+
+            type_control_id = current_params.get("typeOfControlledElement")
             if type_control_id is not None:
-                print(f"DEBUG: Filtering by type ID: {type_control_id}")
-                query_conditions.append("oc.\"idTypeControl\" = %s")
+                query_conditions.append('oc."idTypeControl" = %s')
                 query_params.append(type_control_id)
-            
-            # Filter by other parameters
+
             if current_params:
                 param_subqueries = []
-                
                 for param_name, param_value in current_params.items():
-                    if param_name == 'typeOfControlledElement':
+                    if param_name == "typeOfControlledElement":
                         continue
-                    
-                    print(f"DEBUG: Filtering by parameter: {param_name} = {param_value}")
-                    
-                    self.cursor.execute("""
-                        SELECT id FROM "paramsDefinition" 
-                        WHERE name = %s
-                    """, (param_name,))
-                    
+                    self.cursor.execute(
+                        'SELECT id FROM "paramsDefinition" WHERE name = %s',
+                        (param_name,),
+                    )
                     param_def_result = self.cursor.fetchone()
                     if param_def_result:
-                        param_def_id = param_def_result['id']
-                        
-                        param_subqueries.append(f"""
+                        param_def_id = param_def_result["id"]
+                        param_subqueries.append("""
                             EXISTS (
                                 SELECT 1 FROM "paramsObjectControl" poc
                                 WHERE poc."idObjectControl" = oc.id
@@ -98,120 +99,86 @@ class PostgresDataBase(IRepository[TechCardData]):
                                 )
                             )
                         """)
-                        
                         query_params.extend([
                             param_def_id,
                             param_value if isinstance(param_value, int) else None,
                             param_value if isinstance(param_value, float) else None,
                             param_value if isinstance(param_value, str) else None,
-                            param_value if isinstance(param_value, bool) else None
+                            param_value if isinstance(param_value, bool) else None,
                         ])
-                
                 if param_subqueries:
                     query_conditions.append("(" + " AND ".join(param_subqueries) + ")")
-            
-            # Build main query
+
             query = """
-                SELECT oc.id, oc.name, oc."idTypeControl", tce.name as type_name
+                SELECT oc.id, oc.name, oc."idTypeControl", tce.name AS type_name
                 FROM "objectControl" oc
                 JOIN "typeOfControlledElement" tce ON oc."idTypeControl" = tce."Id"
             """
-            
             if query_conditions:
                 query += " WHERE " + " AND ".join(query_conditions)
-            
-            print(f"DEBUG: Query: {query}")
-            print(f"DEBUG: Query params: {query_params}")
-            
+
             self.cursor.execute(query, query_params)
             matching_objects = self.cursor.fetchall()
-            
-            print(f"DEBUG: Found objects: {len(matching_objects)}")
-            for obj in matching_objects:
-                print(f"  - ID: {obj['id']}, Name: {obj['name']}, Type ID: {obj['idTypeControl']}, Type Name: {obj['type_name']}")
-            
+
             if not matching_objects:
                 return data
-            
-            # Get object IDs
-            object_ids = [obj['id'] for obj in matching_objects]
-            print(f"DEBUG: Object IDs to search params for: {object_ids}")
-            
-            # Get parameters ONLY for these objects
+
+            object_ids = [obj["id"] for obj in matching_objects]
+
             self.cursor.execute("""
-                SELECT 
-                    pd.name as param_name,
+                SELECT
+                    pd.name AS param_name,
                     pd."typeData",
                     poc."valueInt",
                     poc."valueDouble",
                     poc."valueString",
                     poc."valueBool",
-                    oc."idTypeControl"  -- Добавляем тип элемента
+                    oc."idTypeControl"
                 FROM "paramsObjectControl" poc
                 JOIN "paramsDefinition" pd ON poc."idDefParams" = pd.id
-                JOIN "objectControl" oc ON poc."idObjectControl" = oc.id  -- JOIN с objectControl
+                JOIN "objectControl" oc ON poc."idObjectControl" = oc.id
                 WHERE poc."idObjectControl" = ANY(%s)
                 ORDER BY pd.name
             """, (object_ids,))
-            
+
             all_params = self.cursor.fetchall()
-            print(f"DEBUG: Found parameters: {len(all_params)} rows")
-            
-            # Group parameter values by parameter name
-            param_values = {}
+            param_values: dict = {}
             for row in all_params:
-                param_name = row['param_name']
-                type_data = row['typeData']
-                v_int = row['valueInt']
-                v_double = row['valueDouble']
-                v_string = row['valueString']
-                v_bool = row['valueBool']
-                obj_type_id = row['idTypeControl']  # Получаем тип элемента
-                
-                print(f"DEBUG: Param '{param_name}' from object type {obj_type_id}")
-                
-                # Проверяем, что параметр принадлежит нужному типу
+                param_name = row["param_name"]
+                type_data = row["typeData"]
+                obj_type_id = row["idTypeControl"]
                 if type_control_id is not None and obj_type_id != type_control_id:
-                    print(f"  WARNING: Skipping - object type {obj_type_id} != filter type {type_control_id}")
                     continue
-                
-                # Extract value
-                if type_data.lower() == 'int' and v_int is not None:
+                v_int = row["valueInt"]
+                v_double = row["valueDouble"]
+                v_string = row["valueString"]
+                v_bool = row["valueBool"]
+                if type_data and type_data.lower() == "int" and v_int is not None:
                     value = v_int
-                elif type_data.lower() == 'double' and v_double is not None:
+                elif type_data and type_data.lower() == "double" and v_double is not None:
                     value = v_double
-                elif type_data.lower() == 'string' and v_string is not None:
+                elif type_data and type_data.lower() == "string" and v_string is not None:
                     value = v_string
-                elif type_data.lower() == 'bool' and v_bool is not None:
+                elif type_data and type_data.lower() == "bool" and v_bool is not None:
                     value = v_bool
                 else:
                     continue
-                
                 if param_name not in param_values:
                     param_values[param_name] = set()
                 param_values[param_name].add(value)
-            
-            # Find all types
-            self.cursor.execute("""
-                SELECT "Id", name FROM "typeOfControlledElement" ORDER BY "Id"
-            """)
+
+            self.cursor.execute(
+                'SELECT "Id", name FROM "typeOfControlledElement" ORDER BY "Id"'
+            )
             type_options = self.cursor.fetchall()
-            
-            print(f"DEBUG: All types in DB: {type_options}")
-            
-            # Update available parameters
+
             for param_name, values_set in param_values.items():
-                values_list = sorted(list(values_set))
-                data.set_available(param_name, values_list)
-                print(f"DEBUG: Setting available {param_name}: {values_list}")
-            
-            # Add type options
+                data.set_available(param_name, sorted(list(values_set)))
             if type_options:
-                type_list = [{"id": t['Id'], "name": t['name']} for t in type_options]
+                type_list = [{"id": t["Id"], "name": t["name"]} for t in type_options]
                 data.set_available("typeOfControlledElement", type_list)
-            
+
             return data
-            
         except Exception as e:
             print(f"Error in findParamsByCurentParam: {e}")
             import traceback
@@ -219,175 +186,258 @@ class PostgresDataBase(IRepository[TechCardData]):
             self.conn.rollback()
             raise
 
-    
+    _NO_BLOCK_NAME = "Без блока"
+
     def getParamDefinitions(self) -> List[dict]:
-        """Get all parameter definitions"""
+        """
+        Список блоков с параметрами. Каждый блок: { "blockId", "name", "params": [ {id, name, type} ] }.
+        Пустые блоки включаются. Параметры с idBlock IS NULL в блоке «Без блока».
+        """
+        if not self.conn or not self.cursor:
+            return []
         try:
+            self.cursor.execute('SELECT "blockId", name FROM blocks ORDER BY "blockId"')
+            blocks_rows = self.cursor.fetchall()
             self.cursor.execute("""
-                SELECT id, name, "typeData"
+                SELECT id, name, "typeData", "idBlock"
                 FROM "paramsDefinition"
-                ORDER BY name
+                ORDER BY "idBlock" NULLS LAST, name
             """)
-            params = self.cursor.fetchall()
-            return [{"id": p[0], "name": p[1], "type": p[2]} for p in params]
+            params_rows = self.cursor.fetchall()
+            result = []
+            for block in blocks_rows:
+                block_id, block_name = block["blockId"], block["name"]
+                params_in_block = [
+                    {"id": r["id"], "name": r["name"], "type": r["typeData"]}
+                    for r in params_rows
+                    if r["idBlock"] == block_id
+                ]
+                result.append({"blockId": block_id, "name": block_name, "params": params_in_block})
+            no_block_params = [
+                {"id": r["id"], "name": r["name"], "type": r["typeData"]}
+                for r in params_rows
+                if r["idBlock"] is None
+            ]
+            if no_block_params:
+                result.append({"blockId": None, "name": self._NO_BLOCK_NAME, "params": no_block_params})
+            return result
         except Exception as e:
             print(f"Error in getParamDefinitions: {e}")
+            self.conn.rollback()
             return []
 
-    def get_available_params_for_type(self, type_id):
+    def get_available_params_for_type(self, type_id: int) -> TechCardData:
         """
-        Получить доступные параметры для типа контролируемого элемента
-        
-        Args:
-            type_id (int): ID типа контролируемого элемента
-            
-        Returns:
-            list: Список доступных параметров
+        Параметры для типа, сгруппированные по блокам.
+        available = { block_name: { param_id: param_name } }. Пустые блоки допускаются.
         """
-        query = """
-        SELECT pd.id, pd.name, pd."typeData"
-        FROM public."paramsDefinition" pd
-        INNER JOIN public."typeParams" tp ON pd.id = tp."idTypeDefParam"
-        WHERE tp."idTypeControlEl" = %s
-        ORDER BY pd.name;
-        """
-        self.cursor.execute(query, (type_id,))
-        rows = self.cursor.fetchall()
-        print(rows)
-        id_name_dict = {row['id']: row['name'] for row in rows}
-        
-        tech_card = TechCardData()
-        tech_card.available = id_name_dict
-        return tech_card
-    
-    def get_all_controlled_element_types(self)->TechCardData:
-        """
-        Получить все типы контролируемых элементов
-        
-        Returns:
-            list: Список всех типов контролируемых элементов
-        """
-        query = """
-        SELECT "Id" as id, name
-        FROM public."typeOfControlledElement"
-        ORDER BY name;
-        """
-        self.cursor.execute(query)
-        
-        rows = self.cursor.fetchall()
-        id_name_dict = {row['id']: row['name'] for row in rows}
-        
-        tech_card = TechCardData()
-        tech_card.available = id_name_dict
+        if not self.conn or not self.cursor:
+            return TechCardData()
+        try:
+            self.cursor.execute('SELECT "blockId", name FROM blocks ORDER BY "blockId"')
+            blocks_rows = self.cursor.fetchall()
+            self.cursor.execute("""
+                SELECT pd.id, pd.name, pd."typeData", pd."idBlock", b.name AS block_name
+                FROM "paramsDefinition" pd
+                INNER JOIN "typeParams" tp ON pd.id = tp."idTypeDefParam"
+                LEFT JOIN blocks b ON pd."idBlock" = b."blockId"
+                WHERE tp."idTypeControlEl" = %s
+                ORDER BY b."blockId" NULLS LAST, pd.name
+            """, (type_id,))
+            rows = self.cursor.fetchall()
+            blocks_dict = {b["name"]: {} for b in blocks_rows}
+            for row in rows:
+                block_name = row["block_name"] if row["block_name"] else self._NO_BLOCK_NAME
+                if block_name not in blocks_dict:
+                    blocks_dict[block_name] = {}
+                blocks_dict[block_name][row["id"]] = row["name"]
+            tech_card = TechCardData()
+            tech_card.available = blocks_dict
+            return tech_card
+        except Exception as e:
+            print(f"Error in get_available_params_for_type: {e}")
+            self.conn.rollback()
+            return TechCardData()
 
-        return tech_card
-    
-    def get_all_objects_by_type_id(self, type_id):
-        """
-        Получить только имена элементов контроля по ID типа
-        
-        Args:
-            type_id (int): ID типа из typeOfControlledElement
-            
-        Returns:
-            list: Имена элементов этого типа
-        """
-        query = """
-        SELECT 
-            id,
-            name
-        FROM public."objectControl"
-        WHERE "idTypeControl" = %s
-        ORDER BY name
-        """
-        self.cursor.execute(query, (type_id,))
-        rows = self.cursor.fetchall()
-        id_name_dict = {row['id']: row['name'] for row in rows}
-        tech_card = TechCardData()
-        tech_card.available = id_name_dict
-        return tech_card
-    
-    
-    def get_all_possible_values_by_param_and_element(self, element_type_id,param_id ):
-        #element_type_id,param_id=param_id,element_type_id
-        """
-        Получить все возможные значения параметра для типа контролируемого элемента
-        
-        Args:
-            param_id (int): ID параметра из paramsDefinition
-            element_type_id (int): ID типа контролируемого элемента
-            
-        Returns:
-            list: Все уникальные значения параметра
-        """
-        # Сначала получаем тип данных параметра
-        type_query = """
-        SELECT "typeData" 
-        FROM public."paramsDefinition" 
-        WHERE id = %s
-        """
-        self.cursor.execute(type_query, (param_id,))
-        result = self.cursor.fetchone()
-        
-        if not result:
-            return []
-        
-        param_type = result['typeData']
-        
-        # Формируем запрос с правильными именами столбцов
-        query = """
-        SELECT DISTINCT 
-            CASE 
-                WHEN poc."valueInt" IS NOT NULL THEN poc."valueInt"::text
-                WHEN poc."valueDouble" IS NOT NULL THEN poc."valueDouble"::text
-                WHEN poc."valueString" IS NOT NULL THEN poc."valueString"
-                WHEN poc."valueBool" IS NOT NULL THEN poc."valueBool"::text
-            END as value,
-            CASE 
-                WHEN poc."valueInt" IS NOT NULL THEN 'integer'
-                WHEN poc."valueDouble" IS NOT NULL THEN 'double'
-                WHEN poc."valueString" IS NOT NULL THEN 'string'
-                WHEN poc."valueBool" IS NOT NULL THEN 'boolean'
-            END as value_type
-        FROM public."paramsObjectControl" poc
-        INNER JOIN public."objectControl" oc ON poc."idObjectControl" = oc.id
-        WHERE poc."idDefParams" = %s 
-            AND oc."idTypeControl" = %s
-        ORDER BY value
-        """
-        
-        self.cursor.execute(query, (param_id, element_type_id))
-        all_values = self.cursor.fetchall()
-        
-        # Преобразуем значения
-        processed_values = []
-        for item in all_values:
-            value = item['value']
-            value_type = item['value_type']
-            
-            if value is None:
-                continue
-                
-            try:
-                if param_type.lower() == 'integer' and value_type == 'integer':
-                    processed_values.append(int(value))
-                elif param_type.lower() in ['double', 'float', 'real'] and value_type in ['double', 'integer']:
-                    processed_values.append(float(value))
-                elif param_type.lower() == 'boolean' and value_type == 'boolean':
-                    processed_values.append(value.lower() == 'true')
-                elif param_type.lower() == 'string' and value_type in ['string', 'integer', 'double', 'boolean']:
-                    processed_values.append(str(value))
-            except (ValueError, TypeError) as e:
-                print(f"Ошибка преобразования значения {value}: {e}")
-                continue
-        
-        # Убираем дубликаты и возвращаем
-        unique_values = []
-        for val in processed_values:
-            if val not in unique_values:
-                unique_values.append(val)
-        
-        tech_card = TechCardData()
-        tech_card.available = {param_id:unique_values}
+    def get_all_controlled_element_types(self) -> TechCardData:
+        """Все типы контролируемых элементов из typeOfControlledElement."""
+        if not self.conn or not self.cursor:
+            return TechCardData()
+        try:
+            self.cursor.execute("""
+                SELECT "Id" AS id, name
+                FROM "typeOfControlledElement"
+                ORDER BY name
+            """)
+            rows = self.cursor.fetchall()
+            id_name_dict = {row["id"]: row["name"] for row in rows}
+            tech_card = TechCardData()
+            tech_card.type = id_name_dict
+            return tech_card
+        except Exception as e:
+            print(f"Error in get_all_controlled_element_types: {e}")
+            self.conn.rollback()
+            return TechCardData()
 
-        return tech_card
+    def get_all_objects_by_type_id(self, type_id: int) -> TechCardData:
+        """Объекты контроля по ID типа из objectControl."""
+        if not self.conn or not self.cursor:
+            return TechCardData()
+        try:
+            self.cursor.execute('SELECT "blockId", name FROM blocks ORDER BY "blockId"')
+            blocks_rows = self.cursor.fetchall()
+
+            # Создаем словарь для результата
+            blocks_dict = {}
+
+            # Инициализируем словарь для каждого блока
+            for block_row in blocks_rows:
+                block_id = block_row["blockId"]
+                block_name = block_row["name"]
+                blocks_dict[block_id] = {
+                    "name": block_name,
+                    "params":{},
+                }
+
+            print(blocks_dict)
+
+
+            self.cursor.execute("""
+                SELECT id, name
+                FROM "objectControl"
+                WHERE "idTypeControl" = %s
+                ORDER BY name
+            """, (type_id,))
+            rows = self.cursor.fetchall()
+            id_name_dict = {row["id"]: row["name"] for row in rows}
+
+            blocks_dict[1]['params']['Объект контроля'] = id_name_dict
+            print(blocks_dict)
+            tech_card = TechCardData()
+            tech_card.available = blocks_dict
+            return tech_card
+        except Exception as e:
+            print(f"Error in get_all_objects_by_type_id: {e}")
+            self.conn.rollback()
+            return TechCardData()
+
+    def get_all_possible_values_by_param_and_element(
+        self, element_type_id: int, param_id: int
+    ) -> TechCardData:
+        """
+        Уникальные значения параметра для типа элемента.
+        paramsObjectControl + objectControl + paramsDefinition.
+        """
+        if not self.conn or not self.cursor:
+            return TechCardData()
+        try:
+            self.cursor.execute(
+                'SELECT "typeData" FROM "paramsDefinition" WHERE id = %s',
+                (param_id,),
+            )
+            result = self.cursor.fetchone()
+            if not result:
+                return TechCardData()
+
+            param_type = result["typeData"]
+            self.cursor.execute("""
+                SELECT DISTINCT
+                    CASE
+                        WHEN poc."valueInt" IS NOT NULL THEN poc."valueInt"::text
+                        WHEN poc."valueDouble" IS NOT NULL THEN poc."valueDouble"::text
+                        WHEN poc."valueString" IS NOT NULL THEN poc."valueString"
+                        WHEN poc."valueBool" IS NOT NULL THEN poc."valueBool"::text
+                    END AS value,
+                    CASE
+                        WHEN poc."valueInt" IS NOT NULL THEN 'integer'
+                        WHEN poc."valueDouble" IS NOT NULL THEN 'double'
+                        WHEN poc."valueString" IS NOT NULL THEN 'string'
+                        WHEN poc."valueBool" IS NOT NULL THEN 'boolean'
+                    END AS value_type
+                FROM "paramsObjectControl" poc
+                INNER JOIN "objectControl" oc ON poc."idObjectControl" = oc.id
+                WHERE poc."idDefParams" = %s AND oc."idTypeControl" = %s
+                ORDER BY value
+            """, (param_id, element_type_id))
+            all_values = self.cursor.fetchall()
+
+            processed_values = []
+            for item in all_values:
+                value = item["value"]
+                value_type = item["value_type"]
+                if value is None:
+                    continue
+                try:
+                    if param_type and param_type.lower() == "integer" and value_type == "integer":
+                        processed_values.append(int(value))
+                    elif param_type and param_type.lower() in ("double", "float", "real") and value_type in ("double", "integer"):
+                        processed_values.append(float(value))
+                    elif param_type and param_type.lower() == "boolean" and value_type == "boolean":
+                        processed_values.append(value.lower() == "true")
+                    elif param_type and param_type.lower() == "string":
+                        processed_values.append(str(value))
+                except (ValueError, TypeError):
+                    continue
+
+            unique_values = list(dict.fromkeys(processed_values))
+            tech_card = TechCardData()
+            tech_card.available = {param_id: unique_values}
+            return tech_card
+        except Exception as e:
+            print(f"Error in get_all_possible_values_by_param_and_element: {e}")
+            self.conn.rollback()
+            return TechCardData()
+
+    def get_params_for_element(self, element_id: int) -> TechCardData:
+        """
+        Все параметры и их значения для элемента, сгруппированные по блокам.
+        available = { block_name: { param_name: value } }. Пустые блоки включаются.
+        """
+        if not self.conn or not self.cursor:
+            return TechCardData()
+        try:
+            self.cursor.execute('SELECT "blockId", name FROM blocks ORDER BY "blockId"')
+            blocks_rows = self.cursor.fetchall()
+            blocks_dict = {b["name"]: {} for b in blocks_rows}
+            self.cursor.execute("""
+                SELECT
+                    pd.name AS param_name,
+                    pd."typeData",
+                    pd."idBlock",
+                    b.name AS block_name,
+                    poc."valueInt",
+                    poc."valueDouble",
+                    poc."valueString",
+                    poc."valueBool"
+                FROM "paramsObjectControl" poc
+                JOIN "paramsDefinition" pd ON poc."idDefParams" = pd.id
+                LEFT JOIN blocks b ON pd."idBlock" = b."blockId"
+                WHERE poc."idObjectControl" = %s
+                ORDER BY b."blockId" NULLS LAST, pd.name
+            """, (element_id,))
+            rows = self.cursor.fetchall()
+            for row in rows:
+                block_name = row["block_name"] if row["block_name"] else self._NO_BLOCK_NAME
+                if block_name not in blocks_dict:
+                    blocks_dict[block_name] = {}
+                type_data = row["typeData"]
+                v_int, v_double, v_string, v_bool = row["valueInt"], row["valueDouble"], row["valueString"], row["valueBool"]
+                if type_data and type_data.lower() == "int" and v_int is not None:
+                    value = v_int
+                elif type_data and type_data.lower() == "double" and v_double is not None:
+                    value = v_double
+                elif type_data and type_data.lower() == "string" and v_string is not None:
+                    value = v_string
+                elif type_data and type_data.lower() == "bool" and v_bool is not None:
+                    value = v_bool
+                else:
+                    value = v_int if v_int is not None else v_double if v_double is not None else v_string if v_string is not None else v_bool
+                if row["param_name"] is not None:
+                    blocks_dict[block_name][row["param_name"]] = value
+            tech_card = TechCardData()
+            tech_card.available = blocks_dict
+            return tech_card
+        except Exception as e:
+            print(f"Error in get_params_for_element: {e}")
+            self.conn.rollback()
+            return TechCardData()
