@@ -20,9 +20,9 @@ def create_adapter(controller: IControllers,):
             elif control_type == "element":
                 tech_card = controller.getControlElements(payload.get("type", 1))
             elif control_type=="elementParams":
-                tech_card = controller.getControlElementParam(payload.get("params", 1))
+                tech_card = controller.getControlElementParam(payload.get("idElement", 1))
             elif control_type=="elementParamValue":
-                tech_card = controller.getControlElementParamValue(payload.get("params", 1)[0],payload.get("params", 1)[1])
+                tech_card = controller.getElementParamsValues(payload.get("idElement", 1))
             else:
                 return{}
         

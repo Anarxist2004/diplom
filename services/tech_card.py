@@ -14,7 +14,6 @@ class TechCardData:
     ):
         self.type = typeObjectControl
         self.params = params or {}
-        self.available: Dict[str, Any] = {}
 
     def get(self, key: str):
         return self.params.get(key)
@@ -22,17 +21,13 @@ class TechCardData:
     def set(self, key: str, value):
         self.params[key] = value
 
-    def set_available(self, key: str, value: Any) -> None:
-        """Установить доступные значения для параметра."""
-        self.available[key] = value
 
     def getTypeObjectControl(self,)->TypeObjectControl:
         return self.type
     
     def to_dict(self) -> Dict:
         return {
-            "current": self.params,
-            "available": self.available
+            "currentParams": self.params,
     }
 
     def _to_json_dict(self) -> Dict[str, Any]:
@@ -40,7 +35,6 @@ class TechCardData:
         return {
             "type": type_val,
             "params": self.params,
-            "available": self.available,
         }
 
     def __str__(self) -> str:

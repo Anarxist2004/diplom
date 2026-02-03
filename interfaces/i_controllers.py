@@ -26,6 +26,10 @@ class IControllers(ABC, Generic[T]):
         pass
 
     @abstractmethod
+    def getElementParamsValues(self,id)->T:
+        pass
+
+    @abstractmethod
     def getControlElementParamValue(self,idCntlEl,idParam)->T:
         pass
     

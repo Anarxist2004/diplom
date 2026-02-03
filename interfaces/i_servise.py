@@ -25,5 +25,9 @@ class IServise(ABC):
         pass
 
     @abstractmethod
+    def geElementParamsValue(self,id)->T:
+        pass
+
+    @abstractmethod
     def getControlElementParamValue(self,idCntlEl,idParam)->T:
         pass

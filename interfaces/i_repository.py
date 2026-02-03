@@ -21,7 +21,7 @@ class IRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def get_available_params_for_type(self, type_id):#получение параметров всех типов контролирующего элемента
+    def get_params_for_type(self, type_id):#получение параметров всех типов контролирующего элемента
         pass
 
     @abstractmethod
