@@ -20,10 +20,13 @@ class PipeLine:
 
         if(len(self.changerArr)<index):
             raise IndexError("index must be >= 0")
-        
+
         for changer in self.changerArr[index]:
-            changer.changeData(techCard) 
+                changer.changeData(techCard) 
 
         techCard.sort_all_params()
+
+
+
 
         

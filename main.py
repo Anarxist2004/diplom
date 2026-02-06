@@ -15,6 +15,11 @@ from services.Changers.ObjectControl.ch_ScopeControl import ScopeControl
 from services.Changers.ObjectControl.ch_ControlZone import ControlZone
 
 from services.Changers.RegulatoryMethodologicalDocumentation.ch_BlockRegMeth import BlockRegMeth
+
+from services.Changers.ControlConditions.ch_ControlConditions import ControlConditions
+
+from services.Changers.PreparationControl.ch_PreparationControl import PreparationControl
+
 def createPipeLine()->PipeLine:
     pipeLine =PipeLine()
     pipeLine.addChanger(SetSortament(),0)#2
@@ -25,8 +30,12 @@ def createPipeLine()->PipeLine:
     pipeLine.addChanger(WeldingMethod(),0)
     pipeLine.addChanger(ScopeControl(),0)
     pipeLine.addChanger(ControlZone(),0)
+
     pipeLine.addChanger(BlockRegMeth(),0)
-    
+
+    pipeLine.addChanger(ControlConditions(),0)
+
+    pipeLine.addChanger(PreparationControl(),0)
     return pipeLine
 
 test =False

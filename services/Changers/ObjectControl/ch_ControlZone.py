@@ -19,11 +19,11 @@ class ControlZone(IDataChanger):
 
         
         if(s<=5):
-            param['data']="не менее 5"
+            param['val']="не менее 5"
         if(s<=20):
-            param['data']="не менее "+str(s)
+            param['val']="не менее "+str(s)
         elif(s>20):
-            param['data']="не менее 20"
+            param['val']="не менее 20"
         
         data.insert_param_to_block_reWrite("Объект контроля",9,param)
              

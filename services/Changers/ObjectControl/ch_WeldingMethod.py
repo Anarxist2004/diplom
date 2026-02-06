@@ -9,7 +9,7 @@ class WeldingMethod(IDataChanger):
                 "name":"Cпособ сварки",
                 "val": ['РДС','РАДС','РДС, РАДС'],
                 }
-        data.insert_param_to_block_reWrite("Объект контроля",6,param)
+        data.insert_param_to_block_reWrite("Объект контроля",'6',param)
              
         return
     

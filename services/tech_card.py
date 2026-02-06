@@ -169,26 +169,42 @@ class TechCardData:
                     old_key = k
                     break
 
-            # 2. Если нашли старый — удаляем и сдвигаем хвост слева
-            if old_key is not None:
+            old_key_found = old_key is not None
+            
+            # 2. Если нашли старый — удаляем
+            if old_key_found:
                 params.pop(old_key)
-                # Сдвигаем ключи > old_key на -1, только подряд идущие
-                sorted_keys = sorted(k for k in params if isinstance(k, int))
-                for k in sorted_keys:
-                    if k > old_key and (k - 1) not in params:
-                        params[k - 1] = params.pop(k)
-                # Если старый ключ был меньше insert_id, смещаем insert_id
-                if old_key < insert_id:
+                
+                # Корректируем insert_id только если old_key был целым числом
+                if isinstance(old_key, int) and old_key < insert_id:
                     insert_id -= 1
 
-            # 3. Сдвигаем хвост вправо только занятые ключи подряд, начиная с insert_id
-            current = insert_id
-            to_move = []
-            while current in params:
-                to_move.append(current)
-                current += 1
-            for k in reversed(to_move):
-                params[k + 1] = params.pop(k)
+                # Сдвигаем только целочисленные ключи, которые больше old_key
+                if isinstance(old_key, int):
+                    sorted_int_keys = sorted(k for k in params if isinstance(k, int))
+                    for k in sorted_int_keys:
+                        if k > old_key:
+                            # Ищем ближайший свободный ключ слева
+                            new_key = k - 1
+                            while new_key in params or new_key == old_key:
+                                new_key -= 1
+                            if new_key not in params:
+                                params[new_key] = params.pop(k)
+
+            # 3. Сдвигаем хвост вправо только для целочисленных ключей, начиная с insert_id
+            # Собираем все целочисленные ключи >= insert_id
+            int_keys_greater_equal = []
+            for k in params.keys():
+                if isinstance(k, int) and k >= insert_id:
+                    int_keys_greater_equal.append(k)
+            
+            # Сортируем по убыванию и сдвигаем
+            for k in sorted(int_keys_greater_equal, reverse=True):
+                # Ищем ближайший свободный ключ справа
+                new_key = k + 1
+                while new_key in params:
+                    new_key += 1
+                params[new_key] = params.pop(k)
 
             # 4. Вставляем новый параметр
             params[insert_id] = dict(param)
