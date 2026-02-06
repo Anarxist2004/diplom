@@ -1,5 +1,6 @@
 import json
 from typing import Optional, Dict, Any
+from typing import Union
 
 from enum import StrEnum
 class TypeObjectControl(StrEnum):
@@ -51,6 +52,17 @@ class TechCardData:
             indent=2,
         )
 
+    def from_jsonDeSerialise(self, data: str | Dict[str, Any]) -> "TechCardData":
+        if isinstance(data, str):
+            data = json.loads(data)  # превращаем JSON-строку в словарь
+
+        type_val = data.get("type")
+        params = data.get("params", {})
+
+
+        self.typeObjectControl=type_val
+        self.params=params
+    
     def has_block_and_param(self,block_name: str,param_name: str) -> bool:
         for block in self.params.values():
             if block.get("name") == block_name:
@@ -107,33 +119,80 @@ class TechCardData:
 
         return False
     
-    def insert_param_to_block(
-        self,
-        block_name: str,
-        insert_id: int,
-        param: Dict[str, Any]
-    ) -> bool:
+    def insert_param_to_block(self, block_name: str, insert_id: int, param: Dict[str, Any]) -> bool:
         if "name" not in param:
             raise ValueError("param должен содержать ключ 'name'")
 
         for block in self.params.values():
-            if block.get("name") == block_name:
-                params = block.setdefault("params", {})
+            if block.get("name") != block_name:
+                continue
 
-                for existing in params.values():
-                    if existing.get("name") == param["name"]:
-                        return False
+            params = block.setdefault("params", {})
 
-                numeric_keys = sorted(
-                    k for k in params.keys() if isinstance(k, int)
-                )
+            # Проверка на дубликат по имени
+            for existing in params.values():
+                if existing.get("name") == param["name"]:
+                    return False
 
-                for k in reversed(numeric_keys):
-                    if k >= insert_id:
-                        params[k + 1] = params.pop(k)
+            idx = insert_id
+            to_move = []
 
-                params[insert_id] = dict(param)
-                return True
+            # Находим цепочку занятых ключей подряд, начиная с insert_id
+            while idx in params:
+                to_move.append(idx)
+                idx += 1
+
+            # Сдвигаем только цепочку занятых ключей
+            for k in reversed(to_move):
+                params[k + 1] = params.pop(k)
+
+            # Вставляем новый параметр
+            params[insert_id] = dict(param)
+            return True
+
+        return False
+    
+    def insert_param_to_block_reWrite(self, block_name: str, insert_id: int, param: Dict[str, Any]) -> bool:
+        if "name" not in param:
+            raise ValueError("param должен содержать ключ 'name'")
+
+        for block in self.params.values():
+            if block.get("name") != block_name:
+                continue
+
+            params = block.setdefault("params", {})
+
+            # 1. Проверяем, есть ли параметр с таким же name
+            old_key = None
+            for k, existing in params.items():
+                if existing.get("name") == param["name"]:
+                    old_key = k
+                    break
+
+            # 2. Если нашли старый — удаляем и сдвигаем хвост слева
+            if old_key is not None:
+                params.pop(old_key)
+                # Сдвигаем ключи > old_key на -1, только подряд идущие
+                sorted_keys = sorted(k for k in params if isinstance(k, int))
+                for k in sorted_keys:
+                    if k > old_key and (k - 1) not in params:
+                        params[k - 1] = params.pop(k)
+                # Если старый ключ был меньше insert_id, смещаем insert_id
+                if old_key < insert_id:
+                    insert_id -= 1
+
+            # 3. Сдвигаем хвост вправо только занятые ключи подряд, начиная с insert_id
+            current = insert_id
+            to_move = []
+            while current in params:
+                to_move.append(current)
+                current += 1
+            for k in reversed(to_move):
+                params[k + 1] = params.pop(k)
+
+            # 4. Вставляем новый параметр
+            params[insert_id] = dict(param)
+            return True
 
         return False
     
@@ -169,3 +228,89 @@ class TechCardData:
             )
 
             block["params"] = dict(sorted_items)
+
+    def get_param_value(self,block_name: str,param_name: str) -> Optional[Any]:
+        for block in self.params.values():
+            if block.get("name") == block_name:
+                params = block.get("params", {})
+                for param in params.values():
+                    if param.get("name") == param_name:
+                        return param.get("val")
+                return None
+        return None
+    
+    def _parse_id(self, key) -> list[int]:
+        if isinstance(key, int):
+            return [key]
+        if isinstance(key, str):
+            return [int(p) for p in key.split(".") if p.isdigit()]
+        return []
+    
+    def _same_level(self, a: list[int], b: list[int]) -> bool:
+        return len(a) == len(b)
+    
+    def change_param_id_by_name_autoshift(
+        self,
+        block_name: str,
+        param_name: str,
+        new_id: Union[int, str]
+    ) -> bool:
+        target_id = self._parse_id(new_id)
+
+        for block in self.params.values():
+            if block.get("name") != block_name:
+                continue
+
+            params = block.get("params", {})
+            old_key = None
+            old_id = None
+
+            # ищем параметр по имени
+            for k, v in params.items():
+                if v.get("name") == param_name:
+                    old_key = k
+                    old_id = self._parse_id(k)
+                    break
+
+            if old_key is None:
+                return False  # параметр не найден
+
+            # проверка: параметр уже на нужном месте
+            if old_id == target_id:
+                return True  # ничего не делаем
+
+            # собираем id того же уровня
+            level_keys = []
+            for k in params.keys():
+                parsed = self._parse_id(k)
+                if self._same_level(parsed, target_id):
+                    level_keys.append((k, parsed))
+
+            # сдвигаем в обратном порядке
+            for k, parsed in sorted(level_keys, key=lambda x: x[1], reverse=True):
+                if parsed >= target_id:
+                    new_key = ".".join(str(p) for p in (parsed[:-1] + [parsed[-1] + 1]))
+                    params[new_key] = params.pop(k)
+
+            # вставляем параметр
+            params[".".join(str(p) for p in target_id)] = params.pop(old_key)
+
+            # сортируем после операции
+            sorted_items = sorted(
+                params.items(), key=lambda item: self._id_to_sort_key(item[0])
+            )
+            block["params"] = dict(sorted_items)
+            return True
+
+        return False
+    
+    def hasSpecParam(self,block_name: str,param_name: str):
+        val = self.get_param_value(block_name, param_name)
+    
+        # если пустое поле (None) или массив (list/tuple) — False
+        if val is None or isinstance(val, (list, tuple)):
+            return False
+        
+        # иначе не массив — True
+        return True
+        

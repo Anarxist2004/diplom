@@ -36,3 +36,8 @@ class TechCardService(IServise):
 
         self.pipeLine.process(techCars,0)
         return techCars
+    
+
+    def updateTechCard(self,techCard)->TechCardData:
+        self.pipeLine.process(techCard,0)
+        return techCard

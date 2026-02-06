@@ -32,6 +32,10 @@ class IControllers(ABC, Generic[T]):
     @abstractmethod
     def getControlElementParamValue(self,idCntlEl,idParam)->T:
         pass
+
+    @abstractmethod
+    def updateTechCard(self,techCard)->T:
+        pass
     
     # @abstractmethod
     # def selectionOfControlObject(self)->T:

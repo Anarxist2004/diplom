@@ -568,6 +568,26 @@ class PostgresDataBase(IRepository[TechCardData]):
                 typeObjectControl=type_object,
                 params=blocks_dict
             )
+
+            self.cursor.execute("""SELECT
+                    m."idMaterial",
+                    m.name
+                FROM material m
+                ORDER BY m.name
+            """)
+                
+            rows = self.cursor.fetchall()
+            steel_names = [
+                row['name']
+                for row in rows
+                if row.get('name')
+            ]
+            paramSt={
+                'name':'Основной материал(марка стали)',
+                'val':steel_names
+                }
+            tech_card.add_param_to_block("Объект контроля",paramSt)
+
             return tech_card
         except Exception as e:
             print(f"Error in get_params_for_element: {e}")

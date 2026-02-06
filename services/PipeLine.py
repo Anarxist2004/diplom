@@ -24,4 +24,6 @@ class PipeLine:
         for changer in self.changerArr[index]:
             changer.changeData(techCard) 
 
+        techCard.sort_all_params()
+
         

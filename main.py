@@ -5,11 +5,28 @@ from services.PipeLine import PipeLine
 from controllers.controllerWeb import ControllerWeb
 from controllers.adapterWeb import create_adapter
 
-from services.Changers.ch_CategoryPNA import CategoryPNA
+from services.Changers.ObjectControl.ch_CategoryPNA import CategoryPNA
+from services.Changers.ObjectControl.ch_ControlElement import ControlElement
+from services.Changers.ObjectControl.ch_TypeWeldedJoint import  TypeWeldedJoint
+from services.Changers.ObjectControl.ch_SetSortament import SetSortament
+from services.Changers.ObjectControl.ch_WidthHeightBulgeST526480 import WidthHeightBulgeST526480
+from services.Changers.ObjectControl.ch_WeldingMethod import WeldingMethod
+from services.Changers.ObjectControl.ch_ScopeControl import ScopeControl
+from services.Changers.ObjectControl.ch_ControlZone import ControlZone
 
+from services.Changers.RegulatoryMethodologicalDocumentation.ch_BlockRegMeth import BlockRegMeth
 def createPipeLine()->PipeLine:
     pipeLine =PipeLine()
-    pipeLine.addChanger(CategoryPNA(),0)
+    pipeLine.addChanger(SetSortament(),0)#2
+    pipeLine.addChanger(ControlElement(),0)#2
+    pipeLine.addChanger(CategoryPNA(),0)#3
+    pipeLine.addChanger(TypeWeldedJoint(),0)#5
+    pipeLine.addChanger(WidthHeightBulgeST526480(),0)
+    pipeLine.addChanger(WeldingMethod(),0)
+    pipeLine.addChanger(ScopeControl(),0)
+    pipeLine.addChanger(ControlZone(),0)
+    pipeLine.addChanger(BlockRegMeth(),0)
+    
     return pipeLine
 
 test =False

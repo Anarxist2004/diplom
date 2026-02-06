@@ -4,11 +4,11 @@ from services.tech_card import TechCardData
 class CategoryPNA(IDataChanger):
     def changeData(self,data:TechCardData):
         param={
-                "name":"[Категория по ПНАЭ Г-7-010-89]",
+                "name":"Категория по ПНАЭ Г-7-010-89",
                 "val": ["I","II",'III',"IIа","IIа",'IIIa','IIIв','IIIc'],
                 }
         data.insert_param_to_block("Объект контроля",3,param)
-        print(data)                
+             
 
         # for block_key, block in data["params"].items():
         #     if block.get("name") == "Объект контроля":

@@ -26,6 +26,11 @@ class ControllerWeb(IControllers[TechCardData]):
     
     def handle_request(self, data: TechCardData) -> TechCardData:
         """Обрабатывает входные данные и возвращает результат"""
-        pass    
+        pass
+
+    def updateTechCard(self,techCard)->TechCardData:##обновляем тех карту
+        data =TechCardData()
+        data.from_jsonDeSerialise(techCard)
+        return self.serv.updateTechCard(data)
 
 

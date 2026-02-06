@@ -31,3 +31,7 @@ class IServise(ABC):
     @abstractmethod
     def getControlElementParamValue(self,idCntlEl,idParam)->T:
         pass
+
+    @abstractmethod
+    def updateTechCard(self,techCard)->T:
+        pass
