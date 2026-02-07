@@ -19,7 +19,7 @@ from services.Changers.RegulatoryMethodologicalDocumentation.ch_BlockRegMeth imp
 from services.Changers.ControlConditions.ch_ControlConditions import ControlConditions
 
 from services.Changers.PreparationControl.ch_PreparationControl import PreparationControl
-
+from services.Changers.ControlProcedure.ch_ControlProcedure import ControlProcedure
 def createPipeLine()->PipeLine:
     pipeLine =PipeLine()
     pipeLine.addChanger(SetSortament(),0)#2
@@ -36,6 +36,9 @@ def createPipeLine()->PipeLine:
     pipeLine.addChanger(ControlConditions(),0)
 
     pipeLine.addChanger(PreparationControl(),0)
+
+    # pipeLine.addChanger(ControlProcedure(),0)#6 доделать
+    
     return pipeLine
 
 test =False
